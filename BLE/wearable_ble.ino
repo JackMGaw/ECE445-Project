@@ -7,6 +7,7 @@
 #define SERVICE_UUID        "12345678-1234-1234-1234-1234567890ab"
 #define CHARACTERISTIC_UUID "abcd1234-5678-1234-5678-1234567890ab"
 
+// Packet format sent to the central device.
 struct __attribute__((packed)) MotionPacket {
   uint8_t nodeId;
   uint32_t packetId;
@@ -31,6 +32,7 @@ public:
   void onDisconnect(BLEServer* pServer) override;
 };
 
+// This class manages BLE advertising and packet sending.
 class BLEPeripheralNode {
 private:
   BLEServer* server;
@@ -86,13 +88,14 @@ public:
     }
   }
 
+  // buildPacket() creates one motion packet before sending.
   MotionPacket buildPacket() {
     MotionPacket pkt;
     pkt.nodeId = nodeId;
     pkt.packetId = packetCounter++;
     pkt.timestampMs = millis();
 
-    // 先用假原始数据，后面替换成 LSM6DSOTR 实际读数
+    // Temporary dummy data, replace later with real LSM6DSOTR readings
     pkt.ax = 0.10f + 0.01f * (pkt.packetId % 10);
     pkt.ay = 0.20f + 0.02f * (pkt.packetId % 10);
     pkt.az = 9.80f + 0.01f * (pkt.packetId % 5);
@@ -104,6 +107,7 @@ public:
     return pkt;
   }
 
+  // sendPacket() pushes the packet out as a BLE notification.
   void sendPacket(const MotionPacket& pkt) {
     characteristic->setValue((uint8_t*)&pkt, sizeof(MotionPacket));
     characteristic->notify();
@@ -129,6 +133,7 @@ public:
     Serial.println(pkt.gz, 3);
   }
 
+  // update() handles periodic sending and reconnect behavior.
   void update() {
     if (deviceConnected && millis() - lastSendMs >= 500) {
       lastSendMs = millis();
@@ -149,6 +154,7 @@ public:
   }
 };
 
+// These callbacks forward connection events to the main node object.
 void PeripheralServerCallbacks::onConnect(BLEServer* pServer) {
   owner->setConnected(true);
 }
@@ -157,14 +163,17 @@ void PeripheralServerCallbacks::onDisconnect(BLEServer* pServer) {
   owner->setConnected(false);
 }
 
+// Main wearable BLE node instance.
 BLEPeripheralNode wearableNode(1);
 
+// setup() starts Serial and BLE advertising.
 void setup() {
   Serial.begin(115200);
   delay(1000);
   wearableNode.begin();
 }
 
+// loop() keeps the BLE node running.
 void loop() {
   wearableNode.update();
   delay(10);
