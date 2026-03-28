@@ -9,6 +9,7 @@
 #define SERVICE_UUID        "12345678-1234-1234-1234-1234567890ab"
 #define CHARACTERISTIC_UUID "abcd1234-5678-1234-5678-1234567890ab"
 
+// Packet format received from the wearable node.
 struct __attribute__((packed)) MotionPacket {
   uint8_t nodeId;
   uint32_t packetId;
@@ -23,6 +24,7 @@ struct __attribute__((packed)) MotionPacket {
 
 class BLECentralReceiver;
 
+// Client callbacks handle connect and disconnect events.
 class CentralClientCallbacks : public BLEClientCallbacks {
 private:
   BLECentralReceiver* owner;
@@ -33,6 +35,7 @@ public:
   void onDisconnect(BLEClient* pclient) override;
 };
 
+// Scan callbacks check whether a discovered device is the one we want.
 class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
 private:
   BLECentralReceiver* owner;
@@ -42,6 +45,7 @@ public:
   void onResult(BLEAdvertisedDevice advertisedDevice) override;
 };
 
+// This class manages scanning, connecting, and receiving BLE notifications.
 class BLECentralReceiver {
 private:
   BLEAdvertisedDevice* targetDevice;
@@ -109,6 +113,7 @@ public:
     return connected;
   }
 
+  // This callback parses incoming motion data and prints it to Serial.
   static void notifyCallback(
     BLERemoteCharacteristic* remoteChar,
     uint8_t* data,
@@ -186,6 +191,7 @@ public:
     return true;
   }
 
+  // update() runs the client state flow for connect and rescan.
   void update() {
     if (doConnect) {
       if (connectToServer()) {
@@ -204,6 +210,7 @@ public:
   }
 };
 
+// These callback definitions forward BLE events back to the receiver object.
 void CentralClientCallbacks::onConnect(BLEClient* pclient) {
   Serial.println("Connected to server");
 }
@@ -216,14 +223,17 @@ void AdvertisedDeviceCallbacks::onResult(BLEAdvertisedDevice advertisedDevice) {
   owner->handleFoundDevice(advertisedDevice);
 }
 
+// This is the main BLE receiver instance for the chair side.
 BLECentralReceiver chairReceiver;
 
+// setup() starts Serial and initializes the BLE client logic.
 void setup() {
   Serial.begin(115200);
   delay(1000);
   chairReceiver.begin();
 }
 
+// loop() keeps the BLE state machine running.
 void loop() {
   chairReceiver.update();
   delay(100);
