@@ -20,24 +20,26 @@ void setup() {
   }
   Serial.println("Backpack init'd.");
 
-  //Sets the position (cursor) for where text will be printed to, (A, B), A represents columns, B represents row
-  //Our LCD display has 2 rows and 16 columns, Characters that go over the number of availible columns are just not printed
-  //They do not overflow to the next row, keep that in mind
+  /*lcd.setCursor(Col, Row) Sets the position (cursor) for where text will be printed to our LCD display has 2 rows and 16 columns.
+  Our LCD display has 2 rows and 16 columns, characters that go over the number of availible columns are just not printed, they
+  do not overflow to the next row, keep that in mind*/
   lcd.setCursor(0, 0);      
-  lcd.setBacklight(HIGH);       //Sets Backlight on so characters can be visible
+  lcd.setBacklight(HIGH);       //Sets backlight on so characters can be visible
   lcd.clear();
 }
 
 void loop() {
-  lcd.clear();                  //Clears LCD if there is any text already being displayed
-  lcd.setCursor(0,0);
-  lcd.print(":)");    //Prints the word "Initializing" to the first row (row 0), taking up 12 columns (columns 0-11)
-  delay(1000);                  //4 second delay
-  lcd.clear();
-  lcd.clear();                  //Clears LCD if there is any text already being displayed
-  lcd.setCursor(0,0);
-  lcd.print(":D");    //Prints the word "Initializing" to the first row (row 0), taking up 12 columns (columns 0-11)
-  delay(1000);                  //4 second delay
-  lcd.clear();         
+  lcd.setCursor(0,0);           //Sets cursor to col 0, row 0
+  lcd.print(":)");              //Prints ":)" to the first row (row 0), taking up 2 columns (columns 0-1)
+  lcd.setCursor(0,1);           //Sets cursor to col 0, row 1
+  lcd.print(":D");              //Prints ":D" to the second row (row 1), taking up 2 columns (columns 0-1)
+  delay(1000);                  //1 second delay
+  lcd.clear();                  //Clears LCD screen of all text
+  lcd.setCursor(0,0);            //Sets cursor to col 0, row 0
+  lcd.print(":D");              //Prints ":D" to the first row (row 0), taking up 2 columns (columns 0-1)
+  lcd.setCursor(0,1);           //Sets cursor to col 0, row 1
+  lcd.print(":)");              //Prints ":)" to the second row (row 1), taking up 2 columns (columns 0-1)
+  delay(1000);                  //1 second delay
+  lcd.clear();                  //Clears LCD screen of all text
  
 }
