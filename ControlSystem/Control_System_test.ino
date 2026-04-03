@@ -8,8 +8,8 @@
 #define SDA_PIN 4
 #define SCL_PIN 5
 
-#define HX711_DOUT 3
-#define HX711_SCK  46
+#define HX711_DOUT 18
+#define HX711_SCK  8
 
 #define printf(format, args...) do {char buf[256]; sprintf(buf, format, args); Serial.print(buf);} while (0)
 
@@ -50,7 +50,7 @@ ulong activityStartTime = 0;
 ulong lastDisplayTime = 0;
 
 
-ulong alertTime = 30000;         // 30s
+ulong alertTime = 5000;         // 30s
 ulong needActivityTime = 10000;  // 10s
 
 //function declarations
@@ -106,7 +106,7 @@ void setup() {
 
 
 void loop() {
-  value = readAverage(50);
+  value = readAverage(20);
 
   // Button1: increase timer
   if (isButton1Pressed()) {
@@ -127,7 +127,7 @@ void loop() {
   updateState();
   updateLCD();
 
-  delay(50);
+  delay(20);
 }
 
 
@@ -388,20 +388,20 @@ int readHX711() {
 }
 
 int readAverage(int samplePeriod) {
-  static uint samples[10] = {0};
+  static uint samples[5] = {0};
   static uint counter = 0;
 
   samples[counter] = readHX711();
   counter++;
-  counter %= 10;
+  counter %= 5;
 
   uint sum = 0;
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 5; i++) {
     sum += samples[i];
   }
 
   delay(samplePeriod);
-  return sum / 10;
+  return sum / 5;
 }
 
 Calibration Calibrate() {
