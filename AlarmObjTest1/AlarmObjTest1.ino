@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <Arduino.h>
 
-#define ALARM 1
+#define ALARM 2
 
 Alarm myAlarm(ALARM);
 
