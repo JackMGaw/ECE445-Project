@@ -1,12 +1,13 @@
 #include "SeatSensor.h"
 #include "Alarm.h"
 #include "Button.h"
-#include <Adafruit_LiquidCrystal.h>   //Adafruit LCD display library
-#include <Wire.h>                     //Needed for LCD I2C 
+#include "chairmount_BLE.h"
+#include <Adafruit_LiquidCrystal.h>
+#include <Wire.h>
 #include <cstdint>
-#include <string.h> 
+#include <string.h>
 
-//PIN DEFINITIONS
+// PIN DEFINITIONS
 #define PIN_DOUT    3
 #define PIN_SCK     46
 #define PIN_ALARM   2
@@ -15,48 +16,37 @@
 #define PIN_SDA     4
 #define PIN_SCL     5
 
-//TUNING CONSTANTS (these are in ms and are unsigned longs)
-#define DEFAULT_ALERT_MS   (1UL * 15 * 1000)      //Default time between exercises, 20 min                 //AUGMNTED TO 15SEC FOR DEMO CHANGE BACK LATER
-#define STEP_MS            (60UL * 1000)          //1 min increments
-#define MIN_ALERT_MS       (1UL  * 15 * 1000)     //Floor: 5 min                                          //AUGMNTED TO 15SEC FOR DEMO CHANGE BACK LATER
-#define MAX_ALERT_MS       (60UL * 60 * 1000)     //Ceiling: 60 min
-#define EXERCISE_TARGET_MS (1UL  * 15 * 1000)     //5 min of movement                                     //AUGMNTED TO 15SEC FOR DEMO CHANGE BACK LATER
-#define COOLDOWN_MS        (5UL * 1000)           //5s display
+// TUNING CONSTANTS
+#define DEFAULT_ALERT_MS   (1UL * 15 * 1000)
+#define STEP_MS            (60UL * 1000)
+#define MIN_ALERT_MS       (1UL * 15 * 1000)
+#define MAX_ALERT_MS       (60UL * 60 * 1000)
+#define EXERCISE_TARGET_MS (1UL * 15 * 1000)
+#define COOLDOWN_MS        (5UL * 1000)
 
-//STATES
 enum State {EMPTY, SITTING, STANDING_IDLE, ALARM, EXERCISING, COOLDOWN};
 
-//STATE MACHINE VARIABLES
-State         currentState   = EMPTY;
-unsigned long sitCredit      = 0;       //ms of net sitting time
-unsigned long alertTime      = DEFAULT_ALERT_MS;
-unsigned long activeMs       = 0;       //ms of confirmed exercise
-unsigned long cooldownStart  = 0;
-unsigned long lastTick       = 0;
-unsigned long buttonMsgExpiry= 0;      //Controls how long button message shows on LCD
+State         currentState    = EMPTY;
+unsigned long sitCredit       = 0;
+unsigned long alertTime       = DEFAULT_ALERT_MS;
+unsigned long activeMs        = 0;
+unsigned long cooldownStart   = 0;
+unsigned long lastTick        = 0;
+unsigned long buttonMsgExpiry = 0;
 
-//OBJECT DECLARATIONS
-SeatSensor              seat(PIN_DOUT, PIN_SCK);
-Alarm                   alarm1(PIN_ALARM);
-Button                  button1(PIN_BUTTON1);   //Increase alert time
-Button                  button2(PIN_BUTTON2);   //Decrease alert time
-Adafruit_LiquidCrystal  lcd(0);
+SeatSensor             seat(PIN_DOUT, PIN_SCK);
+Alarm                  alarm1(PIN_ALARM);
+Button                 button1(PIN_BUTTON1);
+Button                 button2(PIN_BUTTON2);
+Adafruit_LiquidCrystal lcd(0);
 
-//HANDLE BLE (replace in future once BLE has been solved)   <--- TEMPORARY!!!
-bool getWearableActive() {
-  return true;
-}
-
-//LCD HELPER FUNCTIONS (write into a class?)
-//Formats two strings to LCD, clears the LCD prior to printing
-void lcdPrint(const char* line1, const char* line2 = "") {      //creates char*, line2 = "" is a default arg incase 2nd arg is not filled
+void lcdPrint(const char* line1, const char* line2 = "") {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(line1);
   lcd.setCursor(0, 1);
   lcd.print(line2);
 
-  //print to serial monitoring for debugging
   Serial.print("[");
   Serial.print(line1);
   Serial.print(" | ");
@@ -64,20 +54,18 @@ void lcdPrint(const char* line1, const char* line2 = "") {      //creates char*,
   Serial.println("]");
 }
 
-//Formats milliseconds into "MM:SS" in the provided buffer (needs 6+ chars)
-void formatTime(unsigned long ms, char* buf) {      
+void formatTime(unsigned long ms, char* buf) {
   unsigned long totalSec = ms / 1000UL;
   unsigned long mins     = totalSec / 60UL;
   unsigned long secs     = totalSec % 60UL;
-  sprintf(buf, "%02lu:%02lu", mins, secs);      //sprintf(destination buf, )
+  sprintf(buf, "%02lu:%02lu", mins, secs);
 }
 
-//Handles updates to LCD (avoid flickering with too many updates)
 void updateLCD() {
-  if (millis() < buttonMsgExpiry) return;        // If a button message is actively showing, don't overwrite it
+  if (millis() < buttonMsgExpiry) return;
 
   static unsigned long lastLCDUpdate = 0;
-  if (millis() - lastLCDUpdate < 500UL) return;  //avoids flickering
+  if (millis() - lastLCDUpdate < 500UL) return;
   lastLCDUpdate = millis();
 
   char line1[17];
@@ -87,7 +75,7 @@ void updateLCD() {
 
   switch (currentState) {
     case EMPTY:
-      lcdPrint("Ready", "Waiting...");
+      lcdPrint("Ready", ChairMountBLE::isConnected() ? "BLE linked" : "BLE scanning");
       break;
 
     case SITTING:
@@ -106,14 +94,17 @@ void updateLCD() {
       break;
 
     case ALARM:
-      lcdPrint("Move around!", "Exercise needed");
+      lcdPrint("Move around!", ChairMountBLE::isConnected() ? "Wearable ready" : "No BLE link");
       break;
 
     case EXERCISING:
-      formatTime(EXERCISE_TARGET_MS - activeMs, tBuf);
-      snprintf(line1, sizeof(line1), "Keep moving!");
-      snprintf(line2, sizeof(line2), "Done in: %s", tBuf);
-      lcdPrint(line1, line2);
+      if (ChairMountBLE::hasExerciseCompleted()) {
+        lcdPrint("Exercise done", "Finishing...");
+      } else {
+        snprintf(line1, sizeof(line1), "Keep moving!");
+        snprintf(line2, sizeof(line2), "Waiting IMU...");
+        lcdPrint(line1, line2);
+      }
       break;
 
     case COOLDOWN:
@@ -122,8 +113,6 @@ void updateLCD() {
   }
 }
 
-
-//STATE MACHINE
 void updateState() {
   unsigned long now = millis();
   unsigned long elapsed = now - lastTick;
@@ -132,11 +121,10 @@ void updateState() {
   seat.update();
   button1.update();
   button2.update();
+  ChairMountBLE::update();
 
-  bool seated  = seat.isOccupied();
-  bool wearableActive = getWearableActive();
+  bool seated = seat.isOccupied();
 
-  // Button handling: only allowed when sitCredit is zero, prints to lcd and serial monitor wh
   if (sitCredit == 0) {
     if (button1.isPressed()) {
       alertTime += STEP_MS;
@@ -172,7 +160,6 @@ void updateState() {
   }
 
   switch (currentState) {
-
     case EMPTY:
       alarm1.alarmOff();
       if (seated) {
@@ -210,8 +197,9 @@ void updateState() {
 
     case ALARM:
       alarm1.alarmOn();
-      if (!seated && wearableActive) {
-        alarm1.alarmOff();      
+      if (!seated) {
+        ChairMountBLE::clearExerciseCompletedFlag();
+        ChairMountBLE::startExerciseSession();
         Serial.println(">>> State: ALARM -> EXERCISING");
         currentState = EXERCISING;
         activeMs     = 0;
@@ -220,17 +208,22 @@ void updateState() {
 
     case EXERCISING:
       activeMs += elapsed;
+
       if (seated) {
+        ChairMountBLE::resetWearable();
         Serial.println(">>> State: EXERCISING -> ALARM (sat mid-exercise)");
         currentState = ALARM;
         activeMs     = 0;
         alarm1.alarmOn();
-      } else if (activeMs >= EXERCISE_TARGET_MS) {
+      } else if (ChairMountBLE::hasExerciseCompleted()) {
+        ChairMountBLE::resetWearable();
         Serial.println(">>> State: EXERCISING -> COOLDOWN");
         alarm1.alarmOff();
         currentState  = COOLDOWN;
         cooldownStart = millis();
         sitCredit     = 0;
+      } else if (activeMs >= EXERCISE_TARGET_MS && !ChairMountBLE::isConnected()) {
+        Serial.println(">>> BLE not connected, still waiting for wearable confirmation");
       }
       break;
 
@@ -246,17 +239,17 @@ void updateState() {
 void setup() {
   Serial.begin(115200);
 
-  //Set up LCD
-  Wire.begin(PIN_SDA, PIN_SCL); 
+  Wire.begin(PIN_SDA, PIN_SCL);
   lcd.begin(16, 2);
   lcd.setBacklight(HIGH);
   lcdPrint("Starting...", "");
   delay(2000);
 
-  //Calibrate seat sensor (tells user via LCD to not sit down)
   lcdPrint("Cal: empty chair", "Don't sit!");
   delay(3000);
   seat.calibrate();
+
+  ChairMountBLE::begin("ChairMountReceiver");
 
   lcdPrint("System ready", "");
   delay(3000);
