@@ -6,37 +6,30 @@
 #include <BLERemoteCharacteristic.h>
 #include <BLEScan.h>
 #include <BLEUtils.h>
-#include <cstring>
 
 namespace ChairMountBLE {
-namespace {
 
-BLEAdvertisedDevice*      targetDevice      = nullptr;
-BLEClient*                bleClient         = nullptr;
-BLERemoteCharacteristic*  dataRemoteChar    = nullptr;
-BLERemoteCharacteristic*  controlRemoteChar = nullptr;
-BLEScan*                  bleScan           = nullptr;
+static const char* SERVICE_UUID = "12345678-1234-1234-1234-1234567890ab";
+static const char* DATA_CHAR_UUID = "abcd1234-5678-1234-5678-1234567890ab";
+static const char* CONTROL_CHAR_UUID = "dcba4321-8765-4321-8765-ba0987654321";
 
-bool bleConnected         = false;
-bool bleShouldConnect     = false;
-bool exerciseCompleted    = false;
-bool latestMotionFlag     = false;
+static BLEAdvertisedDevice* targetDevice = nullptr;
+static BLEClient* bleClient = nullptr;
+static BLERemoteCharacteristic* dataRemoteChar = nullptr;
+static BLERemoteCharacteristic* controlRemoteChar = nullptr;
+static BLEScan* bleScan = nullptr;
 
-void startBleScan();
-bool connectToWearable();
-void sendWearableCommand(uint8_t cmd);
+static bool bleConnected = false;
+static bool bleShouldConnect = false;
+static volatile bool wearableEndReceived = false;
+static unsigned long lastStatusPrint = 0;
 
-class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) override {
     if (advertisedDevice.haveServiceUUID() &&
         advertisedDevice.isAdvertisingService(BLEUUID(SERVICE_UUID))) {
       Serial.println("[BLE] Wearable found");
-
-      if (targetDevice != nullptr) {
-        delete targetDevice;
-        targetDevice = nullptr;
-      }
-
+      if (targetDevice != nullptr) delete targetDevice;
       targetDevice = new BLEAdvertisedDevice(advertisedDevice);
       bleScan->stop();
       bleShouldConnect = true;
@@ -50,13 +43,8 @@ static void notifyCallback(
   size_t length,
   bool isNotify
 ) {
-  (void)pBLERemoteCharacteristic;
-  (void)isNotify;
-
   if (length != sizeof(MotionPacket)) {
-    Serial.printf("[BLE] Bad packet length=%u expected=%u\n",
-                  (unsigned)length,
-                  (unsigned)sizeof(MotionPacket));
+    Serial.printf("[BLE] Bad packet length=%u expected=%u\n", (unsigned)length, (unsigned)sizeof(MotionPacket));
     return;
   }
 
@@ -64,41 +52,35 @@ static void notifyCallback(
   memcpy(&pkt, pData, sizeof(pkt));
 
   if (pkt.type == PACKET_BOOL) {
-    latestMotionFlag = pkt.value;
     Serial.printf("[BLE RX] BOOL node=%u pkt=%lu value=%s\n",
-                  pkt.nodeId,
-                  (unsigned long)pkt.packetId,
-                  pkt.value ? "TRUE" : "FALSE");
+      pkt.nodeId,
+      pkt.packetId,
+      pkt.value ? "TRUE" : "FALSE");
   } else if (pkt.type == PACKET_END) {
-    exerciseCompleted = true;
-    Serial.printf("[BLE RX] END node=%u pkt=%lu\n",
-                  pkt.nodeId,
-                  (unsigned long)pkt.packetId);
+    wearableEndReceived = true;
+    Serial.printf("[BLE RX] END node=%u pkt=%lu\n", pkt.nodeId, pkt.packetId);
   } else {
-    Serial.printf("[BLE RX] Unknown packet type=%u\n", pkt.type);
+    Serial.printf("[BLE RX] Unknown type=%u\n", pkt.type);
   }
 }
 
-void startBleScan() {
+static void startScan() {
   if (bleConnected || bleScan == nullptr) return;
-
   Serial.println("[BLE] Scanning...");
   bleScan->start(5, false);
 }
 
-bool connectToWearable() {
-  if (targetDevice == nullptr) return false;
-
-  bleClient = BLEDevice::createClient();
-  if (bleClient == nullptr) {
-    Serial.println("[BLE] Failed to create client");
+static bool connectToWearable() {
+  if (targetDevice == nullptr) {
+    Serial.println("[BLE] No target device yet");
     return false;
   }
 
+  Serial.println("[BLE] Attempting connection...");
+  bleClient = BLEDevice::createClient();
+
   if (!bleClient->connect(targetDevice)) {
     Serial.println("[BLE] Connect failed");
-    delete bleClient;
-    bleClient = nullptr;
     return false;
   }
 
@@ -106,8 +88,6 @@ bool connectToWearable() {
   if (remoteService == nullptr) {
     Serial.println("[BLE] Service not found");
     bleClient->disconnect();
-    delete bleClient;
-    bleClient = nullptr;
     return false;
   }
 
@@ -117,72 +97,39 @@ bool connectToWearable() {
   if (dataRemoteChar == nullptr || controlRemoteChar == nullptr) {
     Serial.println("[BLE] Missing characteristic");
     bleClient->disconnect();
-    delete bleClient;
-    bleClient = nullptr;
-    dataRemoteChar = nullptr;
-    controlRemoteChar = nullptr;
     return false;
   }
 
   if (!dataRemoteChar->canNotify()) {
     Serial.println("[BLE] Notify not supported");
     bleClient->disconnect();
-    delete bleClient;
-    bleClient = nullptr;
-    dataRemoteChar = nullptr;
-    controlRemoteChar = nullptr;
     return false;
   }
 
   dataRemoteChar->registerForNotify(notifyCallback);
   bleConnected = true;
+  wearableEndReceived = false;
   Serial.println("[BLE] Connected to wearable");
   return true;
 }
 
-void sendWearableCommand(uint8_t cmd) {
-  if (!bleConnected || controlRemoteChar == nullptr) {
-    Serial.println("[BLE] Cannot send cmd, not connected");
-    return;
-  }
-
-  uint8_t data[1] = {cmd};
-  controlRemoteChar->writeValue(data, 1, false);
-
-  if (cmd == CMD_START) {
-    Serial.println("[BLE TX] CMD_START");
-  } else if (cmd == CMD_RESET) {
-    Serial.println("[BLE TX] CMD_RESET");
-  } else {
-    Serial.printf("[BLE TX] CMD_%u\n", cmd);
-  }
-}
-
-}  // namespace
-
-void begin(const char* deviceName) {
-  BLEDevice::init(deviceName);
-
+void begin() {
+  Serial.println("[BLE] Init chair client");
+  BLEDevice::init("ChairMountReceiver");
   bleScan = BLEDevice::getScan();
-  bleScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
+  bleScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   bleScan->setActiveScan(true);
   bleScan->setInterval(100);
   bleScan->setWindow(80);
-
-  exerciseCompleted = false;
-  latestMotionFlag = false;
-  bleConnected = false;
-  bleShouldConnect = false;
-
-  startBleScan();
+  startScan();
 }
 
 void update() {
   if (!bleConnected && bleShouldConnect) {
     bleShouldConnect = false;
     if (!connectToWearable()) {
-      delay(500);
-      startBleScan();
+      delay(300);
+      startScan();
     }
   }
 
@@ -190,21 +137,16 @@ void update() {
     bleConnected = false;
     dataRemoteChar = nullptr;
     controlRemoteChar = nullptr;
-    exerciseCompleted = false;
-    latestMotionFlag = false;
-
-    if (targetDevice != nullptr) {
-      delete targetDevice;
-      targetDevice = nullptr;
-    }
-
-    if (bleClient != nullptr) {
-      delete bleClient;
-      bleClient = nullptr;
-    }
-
+    wearableEndReceived = false;
     Serial.println("[BLE] Disconnected");
-    startBleScan();
+    startScan();
+  }
+
+  if (millis() - lastStatusPrint >= 2000) {
+    lastStatusPrint = millis();
+    Serial.printf("[BLE] status connected=%s end=%s\n",
+      bleConnected ? "YES" : "NO",
+      wearableEndReceived ? "YES" : "NO");
   }
 }
 
@@ -212,37 +154,41 @@ bool isConnected() {
   return bleConnected;
 }
 
-bool hasExerciseCompleted() {
-  return exerciseCompleted;
-}
-
-bool getLatestMotionFlag() {
-  return latestMotionFlag;
-}
-
-void clearExerciseCompletedFlag() {
-  exerciseCompleted = false;
-}
-
-bool startExerciseSession() {
-  if (!bleConnected) return false;
-  exerciseCompleted = false;
-  latestMotionFlag = false;
-  sendWearableCommand(CMD_START);
-  return true;
-}
-
-bool resetWearable() {
-  if (!bleConnected) {
-    exerciseCompleted = false;
-    latestMotionFlag = false;
-    return false;
+static void sendCommand(uint8_t cmd) {
+  if (!bleConnected || controlRemoteChar == nullptr) {
+    Serial.println("[BLE] Cannot send cmd, not connected");
+    return;
   }
 
-  sendWearableCommand(CMD_RESET);
-  exerciseCompleted = false;
-  latestMotionFlag = false;
-  return true;
+  uint8_t data[1];
+  data[0] = cmd;
+  controlRemoteChar->writeValue(data, 1, false);
+
+  if (cmd == CMD_START) {
+    Serial.println("[BLE TX] CMD_START");
+  } else if (cmd == CMD_RESET) {
+    Serial.println("[BLE TX] CMD_RESET");
+  } else {
+    Serial.printf("[BLE TX] cmd=%u\n", cmd);
+  }
 }
 
-}  // namespace ChairMountBLE
+void startExerciseSession() {
+  wearableEndReceived = false;
+  sendCommand(CMD_START);
+}
+
+void resetWearable() {
+  wearableEndReceived = false;
+  sendCommand(CMD_RESET);
+}
+
+bool hasExerciseCompleted() {
+  return wearableEndReceived;
+}
+
+void clearExerciseCompleted() {
+  wearableEndReceived = false;
+}
+
+}
