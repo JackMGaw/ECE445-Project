@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <string.h>
 
-// PIN DEFINITIONS
 #define PIN_DOUT    3
 #define PIN_SCK     46
 #define PIN_ALARM   2
@@ -16,7 +15,6 @@
 #define PIN_SDA     4
 #define PIN_SCL     5
 
-// TUNING CONSTANTS
 #define DEFAULT_ALERT_MS   (1UL * 15 * 1000)
 #define STEP_MS            (60UL * 1000)
 #define MIN_ALERT_MS       (1UL * 15 * 1000)
@@ -26,19 +24,32 @@
 
 enum State {EMPTY, SITTING, STANDING_IDLE, ALARM, EXERCISING, COOLDOWN};
 
-State         currentState    = EMPTY;
-unsigned long sitCredit       = 0;
-unsigned long alertTime       = DEFAULT_ALERT_MS;
-unsigned long activeMs        = 0;
-unsigned long cooldownStart   = 0;
-unsigned long lastTick        = 0;
+State currentState = EMPTY;
+unsigned long sitCredit = 0;
+unsigned long alertTime = DEFAULT_ALERT_MS;
+unsigned long activeMs = 0;
+unsigned long cooldownStart = 0;
+unsigned long lastTick = 0;
 unsigned long buttonMsgExpiry = 0;
+unsigned long lastHeartbeat = 0;
 
-SeatSensor             seat(PIN_DOUT, PIN_SCK);
-Alarm                  alarm1(PIN_ALARM);
-Button                 button1(PIN_BUTTON1);
-Button                 button2(PIN_BUTTON2);
+SeatSensor seat(PIN_DOUT, PIN_SCK);
+Alarm alarm1(PIN_ALARM);
+Button button1(PIN_BUTTON1);
+Button button2(PIN_BUTTON2);
 Adafruit_LiquidCrystal lcd(0);
+
+const char* stateName(State s) {
+  switch (s) {
+    case EMPTY: return "EMPTY";
+    case SITTING: return "SITTING";
+    case STANDING_IDLE: return "STAND";
+    case ALARM: return "ALARM";
+    case EXERCISING: return "EXER";
+    case COOLDOWN: return "COOL";
+    default: return "UNK";
+  }
+}
 
 void lcdPrint(const char* line1, const char* line2 = "") {
   lcd.clear();
@@ -46,18 +57,16 @@ void lcdPrint(const char* line1, const char* line2 = "") {
   lcd.print(line1);
   lcd.setCursor(0, 1);
   lcd.print(line2);
-
-  Serial.print("[");
+  Serial.print("[LCD] ");
   Serial.print(line1);
   Serial.print(" | ");
-  Serial.print(line2);
-  Serial.println("]");
+  Serial.println(line2);
 }
 
 void formatTime(unsigned long ms, char* buf) {
   unsigned long totalSec = ms / 1000UL;
-  unsigned long mins     = totalSec / 60UL;
-  unsigned long secs     = totalSec % 60UL;
+  unsigned long mins = totalSec / 60UL;
+  unsigned long secs = totalSec % 60UL;
   sprintf(buf, "%02lu:%02lu", mins, secs);
 }
 
@@ -75,9 +84,8 @@ void updateLCD() {
 
   switch (currentState) {
     case EMPTY:
-      lcdPrint("Ready", ChairMountBLE::isConnected() ? "BLE linked" : "BLE scanning");
+      lcdPrint("Ready", "Waiting...");
       break;
-
     case SITTING:
       formatTime(sitCredit, tBuf);
       formatTime(alertTime, aBuf);
@@ -85,32 +93,38 @@ void updateLCD() {
       snprintf(line2, sizeof(line2), "%s / %s", tBuf, aBuf);
       lcdPrint(line1, line2);
       break;
-
     case STANDING_IDLE:
       formatTime(sitCredit, tBuf);
       snprintf(line1, sizeof(line1), "Standing");
       snprintf(line2, sizeof(line2), "Credit: %s", tBuf);
       lcdPrint(line1, line2);
       break;
-
     case ALARM:
-      lcdPrint("Move around!", ChairMountBLE::isConnected() ? "Wearable ready" : "No BLE link");
+      lcdPrint("Move around!", "Exercise needed");
       break;
-
     case EXERCISING:
-      if (ChairMountBLE::hasExerciseCompleted()) {
-        lcdPrint("Exercise done", "Finishing...");
-      } else {
-        snprintf(line1, sizeof(line1), "Keep moving!");
-        snprintf(line2, sizeof(line2), "Waiting IMU...");
-        lcdPrint(line1, line2);
-      }
+      formatTime(EXERCISE_TARGET_MS > activeMs ? (EXERCISE_TARGET_MS - activeMs) : 0, tBuf);
+      snprintf(line1, sizeof(line1), "Keep moving!");
+      snprintf(line2, sizeof(line2), "Done in: %s", tBuf);
+      lcdPrint(line1, line2);
       break;
-
     case COOLDOWN:
       lcdPrint("Nice work!", "Rest up.");
       break;
   }
+}
+
+void printHeartbeat(bool seated) {
+  if (millis() - lastHeartbeat < 1000UL) return;
+  lastHeartbeat = millis();
+  Serial.printf("[HB] state=%s seated=%s sitCredit=%lus alert=%lus active=%lus ble=%s end=%s\n",
+    stateName(currentState),
+    seated ? "YES" : "NO",
+    sitCredit / 1000UL,
+    alertTime / 1000UL,
+    activeMs / 1000UL,
+    ChairMountBLE::isConnected() ? "YES" : "NO",
+    ChairMountBLE::hasExerciseCompleted() ? "YES" : "NO");
 }
 
 void updateState() {
@@ -121,41 +135,34 @@ void updateState() {
   seat.update();
   button1.update();
   button2.update();
-  ChairMountBLE::update();
 
   bool seated = seat.isOccupied();
+  bool exerciseDone = ChairMountBLE::hasExerciseCompleted();
+  printHeartbeat(seated);
 
   if (sitCredit == 0) {
     if (button1.isPressed()) {
       alertTime += STEP_MS;
       if (alertTime > MAX_ALERT_MS) alertTime = MAX_ALERT_MS;
-
       char buf[17];
       snprintf(buf, sizeof(buf), "Set: %lu min", alertTime / 60000UL);
       lcdPrint("Time increased!", buf);
       buttonMsgExpiry = millis() + 2000UL;
-
-      Serial.print("Button1 pressed: alertTime -> ");
-      Serial.print(alertTime / 60000UL);
-      Serial.println(" min");
+      Serial.printf("[BTN] Button1 pressed, alertTime=%lu sec\n", alertTime / 1000UL);
     }
     if (button2.isPressed()) {
       if (alertTime > MIN_ALERT_MS) alertTime -= STEP_MS;
-
       char buf[17];
       snprintf(buf, sizeof(buf), "Set: %lu min", alertTime / 60000UL);
       lcdPrint("Time decreased!", buf);
       buttonMsgExpiry = millis() + 2000UL;
-
-      Serial.print("Button2 pressed: alertTime -> ");
-      Serial.print(alertTime / 60000UL);
-      Serial.println(" min");
+      Serial.printf("[BTN] Button2 pressed, alertTime=%lu sec\n", alertTime / 1000UL);
     }
   } else {
     if (button1.isPressed() || button2.isPressed()) {
       lcdPrint("Can't alter time", "sitting began");
       buttonMsgExpiry = millis() + 2000UL;
-      Serial.println("Button pressed but ignored: sitting already started");
+      Serial.println("[BTN] Ignored button press after sitting began");
     }
   }
 
@@ -184,7 +191,7 @@ void updateState() {
 
     case STANDING_IDLE:
       if (sitCredit > elapsed) sitCredit -= elapsed;
-      else                     sitCredit  = 0;
+      else sitCredit = 0;
 
       if (seated) {
         Serial.println(">>> State: STANDING_IDLE -> SITTING");
@@ -197,33 +204,36 @@ void updateState() {
 
     case ALARM:
       alarm1.alarmOn();
-      if (!seated) {
-        ChairMountBLE::clearExerciseCompletedFlag();
+      if (!ChairMountBLE::isConnected()) {
+        Serial.println("[ALARM] Waiting for BLE connection...");
+      }
+      if (!seated && ChairMountBLE::isConnected()) {
+        Serial.println("[ALARM] User stood up, sending CMD_START");
+        ChairMountBLE::clearExerciseCompleted();
         ChairMountBLE::startExerciseSession();
-        Serial.println(">>> State: ALARM -> EXERCISING");
+        alarm1.alarmOff();
+        activeMs = 0;
         currentState = EXERCISING;
-        activeMs     = 0;
+        Serial.println(">>> State: ALARM -> EXERCISING");
       }
       break;
 
     case EXERCISING:
       activeMs += elapsed;
-
       if (seated) {
-        ChairMountBLE::resetWearable();
         Serial.println(">>> State: EXERCISING -> ALARM (sat mid-exercise)");
-        currentState = ALARM;
-        activeMs     = 0;
-        alarm1.alarmOn();
-      } else if (ChairMountBLE::hasExerciseCompleted()) {
         ChairMountBLE::resetWearable();
-        Serial.println(">>> State: EXERCISING -> COOLDOWN");
+        activeMs = 0;
+        currentState = ALARM;
+        alarm1.alarmOn();
+      } else if (exerciseDone) {
+        Serial.println("[EXER] Wearable END received");
+        ChairMountBLE::resetWearable();
         alarm1.alarmOff();
-        currentState  = COOLDOWN;
+        currentState = COOLDOWN;
         cooldownStart = millis();
-        sitCredit     = 0;
-      } else if (activeMs >= EXERCISE_TARGET_MS && !ChairMountBLE::isConnected()) {
-        Serial.println(">>> BLE not connected, still waiting for wearable confirmation");
+        sitCredit = 0;
+        Serial.println(">>> State: EXERCISING -> COOLDOWN");
       }
       break;
 
@@ -238,26 +248,34 @@ void updateState() {
 
 void setup() {
   Serial.begin(115200);
+  delay(300);
+  Serial.println();
+  Serial.println("[SYS] Chair mount booting...");
 
   Wire.begin(PIN_SDA, PIN_SCL);
   lcd.begin(16, 2);
   lcd.setBacklight(HIGH);
   lcdPrint("Starting...", "");
-  delay(2000);
+  delay(1000);
 
+  Serial.println("[SYS] Calibrating seat sensor, keep chair empty");
   lcdPrint("Cal: empty chair", "Don't sit!");
   delay(3000);
   seat.calibrate();
-
-  ChairMountBLE::begin("ChairMountReceiver");
+  Serial.println("[SYS] Seat calibration done");
 
   lcdPrint("System ready", "");
-  delay(3000);
+  delay(1000);
 
+  ChairMountBLE::begin();
   lastTick = millis();
+  lastHeartbeat = millis();
+  Serial.println("[SYS] Setup complete");
 }
 
 void loop() {
+  ChairMountBLE::update();
   updateState();
   updateLCD();
+  delay(20);
 }
