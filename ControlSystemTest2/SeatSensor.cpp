@@ -91,7 +91,10 @@ bool SeatSensor::update(){
 }
 
 bool SeatSensor::isOccupied(){
-    if (!calibrated || !arrFull) return false;               //If not calibrated or the average array is not full, then dont return occupied status
-    return (lastAverage - baseline) > SIT_THRESHOLD;
+    if (!calibrated || !arrFull) return false;
 
+    int32_t diff = lastAverage - baseline;
+    if (diff < 0) diff = -diff;
+
+    return diff > SIT_THRESHOLD;
 }
