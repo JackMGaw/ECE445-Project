@@ -31,7 +31,8 @@ void startExerciseSession();
 void resetWearable();
 bool hasExerciseCompleted();
 void clearExerciseCompleted();
-
+uint32_t getPackCount();
+void resetPackCount();
 }
 
 #endif
