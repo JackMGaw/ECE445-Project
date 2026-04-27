@@ -22,7 +22,7 @@ static BLEScan* bleScan = nullptr;
 static bool bleConnected = false;
 static bool bleShouldConnect = false;
 static volatile bool wearableEndReceived = false;
-
+static uint32_t packCount = 0;
 class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) override {
     if (advertisedDevice.haveServiceUUID() &&
@@ -53,6 +53,7 @@ static void notifyCallback(
   if (pkt.type == PACKET_BOOL) {
     if (pkt.value) {
       Serial.println("[BLE RX] Activity detected");
+      packCount++;
     }
   } else if (pkt.type == PACKET_END) {
     wearableEndReceived = true;
@@ -177,6 +178,12 @@ bool hasExerciseCompleted() {
 
 void clearExerciseCompleted() {
   wearableEndReceived = false;
+}
+uint32_t getPackCount(){
+  return packCount;
+}
+void resetPackCount(){
+  packCount = 0;
 }
 
 }
