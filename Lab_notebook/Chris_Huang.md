@@ -42,6 +42,7 @@ Some schematic and footprint choices required extra checking, especially connect
 - First routed PCB layout screenshot.
 
 ![Final block diagram](../image/image.png)
+
 **Next steps:**  
 Run ERC/DRC checks and prepare the board for fabrication or prototype assembly.
 
@@ -69,6 +70,7 @@ The system needs to distinguish between standing up, actually exercising, and re
 - Draft FSM diagram.
 
 ![Final state machine diagram](../image/State_machine.png)
+
 **Next steps:**  
 Translate the state machine into Arduino code and test each state transition separately.
 
@@ -417,6 +419,7 @@ The final report must match the actual demo system. Earlier design ideas such as
 - Appendix A requirement and verification table.
 
 ![Final assembled prototype](../image/Product.png)
+
 **Next steps:**  
 Finish Appendix A with a concise requirement/verification table and make sure all sections are consistent with the final hardware and software implementation.
 
