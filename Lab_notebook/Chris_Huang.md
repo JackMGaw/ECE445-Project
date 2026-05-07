@@ -413,7 +413,7 @@ The final report must match the actual demo system. Earlier design ideas such as
 - Final state machine diagram.
 - Final block diagram.
 - Appendix A requirement and verification table.
-![Final assembled prototype](../image/product.png)
+![Final assembled prototype](../image/Product.png)
 **Next steps:**  
 Finish Appendix A with a concise requirement/verification table and make sure all sections are consistent with the final hardware and software implementation.
 
