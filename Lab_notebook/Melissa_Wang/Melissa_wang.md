@@ -230,10 +230,9 @@ We successfully soldered both custom boards today: the chair-mounted ESP32-S3 bo
 For the progress demo, the load cell, HX711, IMU, alarm output, and early state-machine behavior were shown using the existing breakout board and breadboard setup. This was safer than relying on newly soldered PCBs that had not yet been fully checked for power, serial output, I2C, and BLE behavior.
 
 ---
-
 ## 2026-04-07 - Soldering Rework Notes
 
-After soldering both custom boards, I spent time figuring out the best way to fix soldering mistakes. I realized that using a **hot air gun** was usually easier for desoldering and resoldering parts compared to using a hot plate or solder wick.
+After soldering both custom boards, I spent time figuring out the best way to fix soldering mistakes. I realized that using a hot air gun was usually easier for desoldering and resoldering parts compared to using a hot plate or solder wick.
 
 The hot air gun made it easier to heat the component evenly and remove it cleanly. However, I also had to be careful because the hot air can heat nearby components that are not supposed to be removed. This means the airflow, temperature, and heating time need to be controlled carefully during rework.
 ---
