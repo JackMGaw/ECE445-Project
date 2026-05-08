@@ -234,7 +234,8 @@ For the progress demo, the load cell, HX711, IMU, alarm output, and early state-
 
 After soldering both custom boards, I spent time figuring out the best way to fix soldering mistakes. I realized that using a hot air gun was usually easier for desoldering and resoldering parts compared to using a hot plate or solder wick.
 
-The hot air gun made it easier to heat the component evenly and remove it cleanly. However, I also had to be careful because the hot air can heat nearby components that are not supposed to be removed. This means the airflow, temperature, and heating time need to be controlled carefully during rework.
+The hot air gun made it easier to heat the component evenly and remove it cleanly. However, I also had to be careful because the hot air can heat nearby components that are not supposed to be removed. This means the airflow, temperature, and heating time need to be controlled carefully during rework. 
+
 ---
 
 ## 2026-04-08 - Custom Board Bring-Up
