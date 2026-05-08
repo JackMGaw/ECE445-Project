@@ -29,6 +29,7 @@
 - [2026-05-01 - Final Report Drafting](#2026-05-01---final-report-drafting)
 - [2026-05-04 - Final Presentation Preparation](#2026-05-04---final-presentation-preparation)
 - [2026-05-06 - Final Paper Submitted](#2026-05-06---final-paper-submitted)
+- [2026-05-07 - Final Reflection and Future Improvements](#2026-05-07---final-reflection-and-future-improvements)
 
 ---
 
@@ -405,6 +406,18 @@ The chair-mounted ESP32 handled chair sensing, timing, and alarm control. The we
 The final prototype showed that the basic concept is feasible. The biggest limitations were BLE reliability, ESP32 power stability, and the simplicity of the threshold-based movement detector. Future improvements could include a stronger wearable power design, better BLE reconnection handling, speech instructions through a speaker, and detection of complete exercise cycles instead of simple threshold crossings.
 
 ---
+
+## 2026-05-07 - Final Reflection and Future Improvements
+
+After finishing the project, I felt relieved and a little sad at the same time. I was relieved because the final demo, report, and presentation were finally complete after a long debugging process. At the same time, I felt sad because the project had taken up so much of the semester, and it was strange to reach the end after spending so much time working through the hardware, firmware, soldering, and testing issues.
+
+Looking back, I think the project successfully demonstrated the main anti-sedentary chair concept, but there are still changes that could make it more polished after the semester ends. One major improvement would be changing the battery and PCB power design. Instead of relying only on a 3.7V battery setup, a future version could use a higher-voltage source, such as a 5V input with proper regulation down to the ESP32’s required voltage. This could help reduce the brownout issues we saw when BLE was enabled.
+
+Another improvement would be redesigning the PCB to better support the wearable power requirements. A cleaner power path, better battery charging support, and more stable voltage regulation would make the wearable IMU board more reliable during movement detection and BLE communication.
+
+I would also want to improve the movement detection algorithm. For this version, the IMU mainly used acceleration magnitude and a threshold to determine whether enough movement occurred. Given more time, I would add a more detailed motion detection scheme that could recognize different types of movement, such as star jumps or other repeated exercise motions. Instead of only checking whether acceleration passed a threshold, the firmware could look for repeated peaks, timing patterns, or full motion cycles to confirm that the user completed a specific activity.
+
+Overall, this project showed me how different real hardware debugging is from just designing a system on paper. Problems like soldering mistakes, battery behavior, BLE brownouts, and sensor thresholds all affected the final system. Even though the prototype was not perfect, it proved the main idea and gave us a clear path for making the system more reliable and polished in a future version.
 
 # References
 
